@@ -2,6 +2,7 @@ package http_from_scratch
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -91,6 +92,24 @@ func (s *Server) handleRequest(request []byte) (response []byte) {
 		response = append(response, []byte(afterEcho)...)
 
 		return response
+	}
+
+	if strings.HasPrefix(path, "/user-agent") {
+		// parse headers
+
+		parsedRequest := strings.Split(string(request), "\r\n")
+
+		for _, header := range parsedRequest[1:] {
+			if header == "" {
+				return []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+			}
+
+			if strings.HasPrefix(strings.ToLower(header), "user-agent: ") {
+				userAgent := strings.Split(header, " ")[1]
+				return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\n%s", userAgent)
+			}
+		}
+		fmt.Printf("parsedRequest: %v\n", parsedRequest)
 	}
 
 	return []byte("HTTP/1.1 404 Not Found\r\n\r\n")
