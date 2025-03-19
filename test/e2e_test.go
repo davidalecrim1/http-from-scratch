@@ -1,24 +1,35 @@
-package e2e_test
+package tests
 
 import (
+	"log"
 	"log/slog"
 	"net"
+	"os"
 	"testing"
 	"time"
 
-	"http-from-scratch/app/server"
+	"http_from_scratch"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestE2E(t *testing.T) {
+func TestMain(m *testing.M) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	s := server.NewServer(":8097")
-	err := s.Start()
-	require.NoError(t, err)
+	s := http_from_scratch.NewServer(":8097")
+	go func() {
+		err := s.Start()
+		if err != nil {
+			log.Fatal("failed to start server for tests")
+		}
+	}()
 
+	code := m.Run()
+	os.Exit(code)
+}
+
+func TestE2E(t *testing.T) {
 	t.Run("should return 200 for valid path", func(t *testing.T) {
 		conn, err := net.Dial("tcp", ":8097")
 		require.NoError(t, err)

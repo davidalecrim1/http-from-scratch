@@ -1,4 +1,4 @@
-package server
+package http_from_scratch
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ func (s *Server) Start() error {
 	}
 
 	s.ln = ln
-	go s.acceptConnections()
+	s.acceptConnections()
 	return nil
 }
 

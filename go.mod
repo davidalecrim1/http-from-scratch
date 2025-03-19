@@ -1,4 +1,4 @@
-module http-from-scratch
+module http_from_scratch
 
 go 1.24.0
 
