@@ -88,15 +88,11 @@ func (s *Server) handleRequest(request []byte) (response []byte) {
 		requestUrlPath := string(parsedRequest[1]) // after the GET
 		afterEcho := strings.Split(requestUrlPath, "/")[2]
 
-		response = []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\n")
-		response = append(response, []byte(afterEcho)...)
-
-		return response
+		contentLength := fmt.Sprintf("Content-Length: %d", len(afterEcho))
+		return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%s\r\n\r\n%s", contentLength, afterEcho)
 	}
 
 	if strings.HasPrefix(path, "/user-agent") {
-		// parse headers
-
 		parsedRequest := strings.Split(string(request), "\r\n")
 
 		for _, header := range parsedRequest[1:] {
@@ -106,7 +102,8 @@ func (s *Server) handleRequest(request []byte) (response []byte) {
 
 			if strings.HasPrefix(strings.ToLower(header), "user-agent: ") {
 				userAgent := strings.Split(header, " ")[1]
-				return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\n%s", userAgent)
+				contentLength := fmt.Sprintf("Content-Length: %d", len(userAgent))
+				return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%s\r\n\r\n%s", contentLength, userAgent)
 			}
 		}
 		fmt.Printf("parsedRequest: %v\n", parsedRequest)

@@ -1,10 +1,13 @@
 package tests
 
 import (
+	"bytes"
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +52,37 @@ func TestE2E(t *testing.T) {
 		assert.Equal(t, readBuf[:n], []byte("HTTP/1.1 200 OK\r\n\r\n"))
 	})
 
+	t.Run("should handle concurrent requests with 200 response for each", func(t *testing.T) {
+		wg := sync.WaitGroup{}
+		totalRequests := 20
+		wg.Add(totalRequests)
+
+		for range totalRequests {
+			go func() {
+				defer wg.Done()
+				conn, err := net.Dial("tcp", ":8097")
+				require.NoError(t, err)
+				require.NoError(t, conn.SetDeadline(time.Now().Add(time.Second*5)))
+
+				writeBuf := []byte(
+					"GET / HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+				)
+				n, err := conn.Write(writeBuf)
+				require.NoError(t, err)
+				assert.Greater(t, n, 0)
+
+				readBuf := make([]byte, 1024)
+				n, err = conn.Read(readBuf)
+				require.NoError(t, err)
+
+				assert.Equal(t, readBuf[:n], []byte("HTTP/1.1 200 OK\r\n\r\n"))
+			}()
+		}
+
+		wg.Wait()
+		require.True(t, true)
+	})
+
 	t.Run("should return 404 for invalid path", func(t *testing.T) {
 		conn, err := net.Dial("tcp", ":8097")
 		require.NoError(t, err)
@@ -69,22 +103,34 @@ func TestE2E(t *testing.T) {
 	})
 
 	t.Run("should return 200 to a created /echo path", func(t *testing.T) {
-		conn, err := net.Dial("tcp", ":8097")
-		require.NoError(t, err)
-		require.NoError(t, conn.SetDeadline(time.Now().Add(time.Second*5)))
+		testCases := []string{"one", "two", "three", "four", "five"}
 
-		writeBuf := []byte(
-			"GET /echo/abc HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
-		)
-		n, err := conn.Write(writeBuf)
-		require.NoError(t, err)
-		assert.Greater(t, n, 0)
+		for _, testCase := range testCases {
+			conn, err := net.Dial("tcp", ":8097")
+			require.NoError(t, err)
+			defer conn.Close()
 
-		readBuf := make([]byte, 1024)
-		n, err = conn.Read(readBuf)
-		require.NoError(t, err)
+			require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
 
-		assert.Equal(t, readBuf[:n], []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc"))
+			var writeBuf bytes.Buffer
+			fmt.Fprintf(&writeBuf,
+				"GET /echo/%s HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\n\r\n",
+				testCase,
+			)
+			n, err := conn.Write(writeBuf.Bytes())
+			require.NoError(t, err)
+			assert.Greater(t, n, 0)
+
+			readBuf := make([]byte, 1024)
+			n, err = conn.Read(readBuf)
+			require.NoError(t, err)
+
+			expectedResponse := fmt.Sprintf(
+				"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
+				len(testCase), testCase,
+			)
+			assert.Equal(t, string(readBuf[:n]), expectedResponse)
+		}
 	})
 
 	t.Run("should return 400 to a bad request", func(t *testing.T) {
