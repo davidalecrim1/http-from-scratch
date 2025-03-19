@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"log/slog"
@@ -46,26 +47,52 @@ func (s *Server) acceptConnections() {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
-	conn.SetDeadline(time.Now().Add(time.Second * 5))
+	err := conn.SetDeadline(time.Now().Add(time.Second * 5))
+	if err != nil {
+		slog.Error("failed to set deadline for the connection", "error", err)
+	}
+
 	readCallback := make(chan []byte)
 	go s.readConnection(conn, readCallback)
 
 	for request := range readCallback {
-		if !strings.HasPrefix(string(request), "GET / HTTP/1.1") {
-			conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		response, err := s.handleRequest(request)
+		if err != nil {
+			slog.Error("failed to handle request", "error", err)
 			continue
 		}
 
-		_, err := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		_, err = conn.Write(response)
 		if err != nil {
 			slog.Debug("failed to write to the connection")
 		}
 	}
 
-	err := conn.Close()
+	err = conn.Close()
 	if err != nil {
 		slog.Error("failed to close the connection", "error", err)
 	}
+}
+
+func (s *Server) handleRequest(request []byte) (response []byte, err error) {
+	path := strings.Split(string(request), " ")[1]
+
+	if path == "/" {
+		return []byte("HTTP/1.1 200 OK\r\n\r\n"), nil
+	}
+
+	if strings.HasPrefix(path, "/echo/") {
+		parsedRequest := bytes.Split(request, []byte(" "))
+		requestUrlPath := string(parsedRequest[1]) // after the GET
+		afterEcho := strings.Split(requestUrlPath, "/")[2]
+
+		response := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\n")
+		response = append(response, []byte(afterEcho)...)
+
+		return response, nil
+	}
+
+	return []byte("HTTP/1.1 404 Not Found\r\n\r\n"), nil
 }
 
 func (s *Server) readConnection(conn net.Conn, readCallback chan []byte) {
