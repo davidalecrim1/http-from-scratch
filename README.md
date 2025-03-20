@@ -1,44 +1,77 @@
 # HTTP Server from Scratch
 
-Learning the fundamentals of computing and http through it's creation from scratch using Go.
+Building an HTTP server from scratch in Go to understand the fundamentals of computing and the HTTP protocol.
 
-## HTTP
+## Features
+- Minimal HTTP server implementation in Go
+- Handles basic HTTP requests and responses
+- Customizable request parsing and response handling
 
-### 200 Response
-```bash
-// Status line
-HTTP/1.1  // HTTP version
-200       // Status code
-OK        // Optional reason phrase
-\r\n      // CRLF that marks the end of the status line
+## Getting Started
 
+### Prerequisites
+- Go 1.23+
+- `make` (optional, for running and testing)
+
+### Running the Server
+You can start the server using:
+```sh
+make run
+```
+Or manually run:
+```sh
+go run ./cmd/main.go
+```
+The server will start listening on `localhost:4221`.
+
+### Running Tests
+To run the test suite:
+```sh
+make test
+```
+Or manually:
+```sh
+go test ./...
+```
+
+## HTTP Overview
+
+### 200 OK Response Example
+```http
+HTTP/1.1 200 OK
 // Headers (empty)
-\r\n      // CRLF that marks the end of the headers
-
 // Response body (empty)
 ```
 
-#### GET Request
-```bash
-// Request line
-GET                          // HTTP method
-/index.html                  // Request target
-HTTP/1.1                     // HTTP version
-\r\n                         // CRLF that marks the end of the request line
-
-// Headers
-Host: localhost:4221\r\n     // Header that specifies the server's host and port
-User-Agent: curl/7.64.1\r\n  // Header that describes the client's user agent
-Accept: */*\r\n              // Header that specifies which media types the client can accept
-\r\n                         // CRLF that marks the end of the headers
-
+### Example GET Request
+```http
+GET /index.html HTTP/1.1
+Host: localhost:4221
+User-Agent: curl/7.64.1
+Accept: */*
 // Request body (empty)
 ```
 
-### CRLF
-CR and LF are control characters or bytecode that can be used to mark a line break in a text file.
+### Understanding CRLF
+Carriage Return (CR) and Line Feed (LF) are control characters used to mark line breaks.
 
-A CR immediately followed by a LF (CRLF, \r\n, or 0x0D0A) moves the cursor to the beginning of the line and then down to the next line.
+A CR followed by an LF (CRLF, `\r\n`, or `0x0D0A`) moves the cursor to the beginning of the line and then down to the next line.
 
-[CRLF Spec](https://developer.mozilla.org/en-US/docs/Glossary/CRLF).
+For more details, see the [CRLF Spec](https://developer.mozilla.org/en-US/docs/Glossary/CRLF).
 
+
+## Compression
+
+An HTTP client uses the Accept-Encoding header to specify the compression schemes it supports. In the following example, the client specifies that it supports the gzip compression scheme:
+
+```http
+GET /echo/foo HTTP/1.1
+Host: localhost:4221
+User-Agent: curl/7.81.0
+Accept: */*
+Accept-Encoding: gzip  // Client specifies it supports the gzip compression scheme.
+```
+
+The server then chooses one of the compression schemes listed in Accept-Encoding and compresses the response body with it.
+
+Then, the server sends a response with the compressed body and a Content-Encoding header. Content-Encoding specifies the compression scheme that was used.

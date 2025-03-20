@@ -1,12 +1,11 @@
 package http_from_scratch
 
 import (
-	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -70,46 +69,73 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleRequest(request []byte) (response []byte) {
+func (s *Server) handleRequest(requestBytes []byte) (response []byte) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Debug("recovered from panic", "recover", r)
-			response = []byte("HTTP/1.1 400 Bad Request\r\n\r\n")
+			resp := Response{
+				statusCode: 400,
+			}
+			response = resp.ToBytes()
 		}
 	}()
 
-	path := strings.Split(string(request), " ")[1]
-	if path == "/" {
-		return []byte("HTTP/1.1 200 OK\r\n\r\n")
-	}
-
-	if strings.HasPrefix(path, "/echo/") {
-		parsedRequest := bytes.Split(request, []byte(" "))
-		requestUrlPath := string(parsedRequest[1]) // after the GET
-		afterEcho := strings.Split(requestUrlPath, "/")[2]
-
-		contentLength := fmt.Sprintf("Content-Length: %d", len(afterEcho))
-		return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%s\r\n\r\n%s", contentLength, afterEcho)
-	}
-
-	if strings.HasPrefix(path, "/user-agent") {
-		parsedRequest := strings.Split(string(request), "\r\n")
-
-		for _, header := range parsedRequest[1:] {
-			if header == "" {
-				return []byte("HTTP/1.1 404 Not Found\r\n\r\n")
-			}
-
-			if strings.HasPrefix(strings.ToLower(header), "user-agent: ") {
-				userAgent := strings.Split(header, " ")[1]
-				contentLength := fmt.Sprintf("Content-Length: %d", len(userAgent))
-				return fmt.Appendf(nil, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n%s\r\n\r\n%s", contentLength, userAgent)
-			}
+	request, err := NewRequest(requestBytes)
+	if err != nil {
+		slog.Error("failed to create request", "error", err)
+		resp := Response{
+			statusCode: 400,
 		}
-		fmt.Printf("parsedRequest: %v\n", parsedRequest)
+		return resp.ToBytes()
 	}
 
-	return []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+	if request.Path == "/" {
+		resp := Response{
+			statusCode: 200,
+		}
+		return resp.ToBytes()
+	}
+
+	if strings.HasPrefix(request.Path, "/echo/") {
+		contentLengthLen := len(strings.Split(request.Path, "/")[2])
+		afterEcho := strings.Split(request.Path, "/")[2]
+
+		resp := Response{
+			statusCode: 200,
+			headers: map[string]string{
+				"Content-Type":   "text/plain",
+				"Content-Length": strconv.Itoa(contentLengthLen),
+			},
+			body: []byte(afterEcho),
+		}
+
+		if value := request.GetHeader("accept-encoding"); value != "" && value == "gzip" {
+			resp.WithEncoding("gzip")
+		}
+
+		return resp.ToBytes()
+	}
+
+	if strings.HasPrefix(request.Path, "/user-agent") {
+		userAgent := request.GetHeader("user-agent")
+		if !(userAgent == "") {
+
+			resp := Response{
+				statusCode: 200,
+				headers: map[string]string{
+					"Content-Type":   "text/plain",
+					"Content-Length": strconv.Itoa(len(userAgent)),
+				},
+				body: []byte(userAgent),
+			}
+			return resp.ToBytes()
+		}
+	}
+
+	resp := Response{
+		statusCode: 404,
+	}
+	return resp.ToBytes()
 }
 
 func (s *Server) readConnection(conn net.Conn, readCallback chan []byte) {
@@ -117,7 +143,7 @@ func (s *Server) readConnection(conn net.Conn, readCallback chan []byte) {
 	for {
 		n, err := conn.Read(readBuf)
 		if err != nil && err == io.EOF {
-			slog.Error("reached the EOF of the reading connection, stoping the reads...")
+			slog.Info("reached the EOF of the reading connection, stoping the reads...")
 			close(readCallback)
 			return
 

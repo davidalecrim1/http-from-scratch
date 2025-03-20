@@ -2,11 +2,14 @@ package tests
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -129,7 +132,51 @@ func TestE2E(t *testing.T) {
 				"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
 				len(testCase), testCase,
 			)
-			assert.Equal(t, string(readBuf[:n]), expectedResponse)
+			assert.Equal(t, expectedResponse, string(readBuf[:n]))
+		}
+	})
+
+	t.Run("should return 200 to a created /echo path with gzip encoding", func(t *testing.T) {
+		testCases := []string{"one", "two", "three", "four", "five"}
+
+		for _, testCase := range testCases {
+			conn, err := net.Dial("tcp", ":8097")
+			require.NoError(t, err)
+			defer conn.Close()
+
+			require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
+
+			var writeBuf bytes.Buffer
+			fmt.Fprintf(&writeBuf,
+				"GET /echo/%s HTTP/1.1\r\nHost: localhost:4221\r\nUser-Agent: curl/7.64.1\r\nAccept: */*\r\nAccept-Encoding: gzip\r\n\r\n",
+				testCase,
+			)
+			n, err := conn.Write(writeBuf.Bytes())
+			require.NoError(t, err)
+			assert.Greater(t, n, 0)
+
+			readBuf := make([]byte, 1024)
+			n, err = conn.Read(readBuf)
+			require.NoError(t, err)
+
+			response := string(readBuf[:n])
+
+			assert.Contains(t, response, "Content-Encoding: gzip")
+
+			bodyIndex := strings.Index(response, "\r\n\r\n")
+			require.Greater(t, bodyIndex, -1)
+
+			// bodyIndex + 4 skips \r\n\r\n (end of headers).
+			encodedBody := readBuf[bodyIndex+4 : n]
+
+			reader, err := gzip.NewReader(bytes.NewReader(encodedBody))
+			require.NoError(t, err)
+			defer reader.Close()
+
+			decompressedBody, err := io.ReadAll(reader)
+			require.NoError(t, err)
+
+			assert.Equal(t, testCase, string(decompressedBody))
 		}
 	})
 
@@ -168,6 +215,7 @@ func TestE2E(t *testing.T) {
 		n, err = conn.Read(readBuf)
 		require.NoError(t, err)
 
-		assert.Equal(t, readBuf[:n], []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/1.2.3"))
+		expected := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/1.2.3")
+		assert.Equal(t, expected, readBuf[:n])
 	})
 }
