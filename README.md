@@ -75,3 +75,6 @@ Accept-Encoding: gzip  // Client specifies it supports the gzip compression sche
 The server then chooses one of the compression schemes listed in Accept-Encoding and compresses the response body with it.
 
 Then, the server sends a response with the compressed body and a Content-Encoding header. Content-Encoding specifies the compression scheme that was used.
+
+## Future Features
+- Support handler functions like default http library 
