@@ -1,6 +1,8 @@
 # Fast HTTP Framework
 
-Fast is a HTTP framework under creation from scratch in Go to understand the fundamentals of computing and the HTTP protocol.
+Fast is a HTTP framework **under creation** from scratch in Go to learn by doing the fundamentals of computing and the HTTP protocol.
+
+For now, this will not be production ready.
 
 ## Features
 - Minimal HTTP server implementation in Go
