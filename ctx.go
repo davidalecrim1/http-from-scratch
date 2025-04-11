@@ -1,10 +1,16 @@
 package fast
 
+import "strings"
+
 type Ctx struct {
 	Request  *Request
 	Response *Response
 	index    int
 	handlers []Handler
+}
+
+func (c *Ctx) Get(key string) string {
+	return c.Request.headers[strings.ToLower(key)]
 }
 
 func (c *Ctx) SendString(body string) error {
@@ -13,11 +19,15 @@ func (c *Ctx) SendString(body string) error {
 }
 
 func (c *Ctx) Set(key, val string) {
-	c.Response.AddHeader(key, val)
+	c.Response.SetHeader(strings.ToLower(key), val)
 }
 
 func (c *Ctx) Method() string {
 	return c.Request.Method
+}
+
+func (c *Ctx) Send(body []byte) {
+	c.Response.SetBody(body)
 }
 
 func (c *Ctx) SendStatus(status int) error {

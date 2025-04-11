@@ -73,7 +73,7 @@ func (app *App) handleConnection(conn net.Conn) {
 	for {
 		requestBytes, err := app.readConnection(conn)
 		if err != nil {
-			slog.Error("failed to read the connection", "error", err)
+			slog.Error("received an error, closing the connection...", "error", err)
 			return
 		}
 

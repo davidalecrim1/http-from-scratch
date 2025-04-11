@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"fast/middleware/compress"
 	"fast/middleware/cors"
 	"fast/middleware/recovery"
 
@@ -32,6 +33,16 @@ func TestHandler(t *testing.T) {
 	)
 
 	app.Get("/", func(c *fast.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	customMiddleware := func(c *fast.Ctx) error {
+		err := c.Next()
+		c.Set("x-middleware-header", "true")
+		return err
+	}
+
+	app.Get("/custom-middleware", customMiddleware, func(c *fast.Ctx) error {
 		return c.SendString("OK")
 	})
 
@@ -64,6 +75,25 @@ func TestHandler(t *testing.T) {
 
 		assert.Equal(t, []byte("OK"), respBody)
 		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+	})
+
+	t.Run("should support wrapped handlers WITHOUT global middlewares", func(t *testing.T) {
+		t.Parallel()
+
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+
+		resp, err := client.Get("http://localhost:8097/custom-middleware")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, []byte("OK"), respBody)
+		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+		assert.Equal(t, "true", resp.Header.Get("x-middleware-header"))
 	})
 
 	t.Run("should handle concurrent requests with 200 response for each", func(t *testing.T) {
@@ -105,6 +135,7 @@ func TestMiddlewares(t *testing.T) {
 
 	app.Use(cors.New())
 	app.Use(recovery.New())
+	app.Use(compress.New())
 
 	app.Get("/middleware", func(c *fast.Ctx) error {
 		return c.SendString("OK")
@@ -115,7 +146,7 @@ func TestMiddlewares(t *testing.T) {
 	})
 
 	go func() {
-		err := app.Listen(":8097")
+		err := app.Listen(":8098")
 		if err != nil {
 			log.Fatal("failed to start server for tests")
 		}
@@ -134,7 +165,7 @@ func TestMiddlewares(t *testing.T) {
 			Timeout: 5 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097/middleware")
+		resp, err := client.Get("http://localhost:8098/middleware")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -154,7 +185,7 @@ func TestMiddlewares(t *testing.T) {
 			Timeout: 5 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097/recovery")
+		resp, err := client.Get("http://localhost:8098/recovery")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -163,5 +194,54 @@ func TestMiddlewares(t *testing.T) {
 
 		assert.Equal(t, respBody, []byte("received an error while executing"))
 		assert.Equal(t, fast.StatusServiceUnavailable, resp.StatusCode)
+	})
+}
+
+func TestMiddleware_Compress(t *testing.T) {
+	app := fast.New(
+		fast.Config{},
+	)
+
+	app.Use(compress.New())
+
+	app.Get("/", func(c *fast.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	go func() {
+		err := app.Listen(":8099")
+		if err != nil {
+			log.Fatal("failed to start server for tests")
+		}
+	}()
+
+	t.Cleanup(func() {
+		if err := app.Shutdown(); err != nil {
+			slog.Error("failed to shutdown the server")
+		}
+	})
+
+	t.Run("should handle middleware with compression", func(t *testing.T) {
+		t.Parallel()
+
+		client := &http.Client{
+			Timeout: 360 * time.Second,
+		}
+
+		resp, err := client.Get("http://localhost:8099")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, respBody, []byte("OK"))
+
+		assert.Equal(t, fast.StatusOK, resp.StatusCode)
+		// TODO: Understand why the content length is removed by the client http.
+		// To better understand this, I would need a playground.
+
+		// This seems to be known by the Go team.
+		// https://github.com/golang/go/blob/9f13665088012298146c573bc2a7255b1caf2750/src/net/http/fs.go#L377
 	})
 }

@@ -1,11 +1,11 @@
-# HTTP Server from Scratch
+# Fast HTTP Framework
 
-Building an HTTP server from scratch in Go to understand the fundamentals of computing and the HTTP protocol.
+Fast is a HTTP framework under creation from scratch in Go to understand the fundamentals of computing and the HTTP protocol.
 
 ## Features
 - Minimal HTTP server implementation in Go
 - Handles basic HTTP requests and responses
-- Customizable request parsing and response handling
+- Built in and custom middlewares
 
 ## Getting Started
 
@@ -22,7 +22,7 @@ Or manually run:
 ```sh
 go run ./cmd/main.go
 ```
-The server will start listening on `localhost:4221`.
+The server will start listening on `localhost:8097`.
 
 ### Running Tests
 To run the test suite:
@@ -75,11 +75,3 @@ Accept-Encoding: gzip  // Client specifies it supports the gzip compression sche
 The server then chooses one of the compression schemes listed in Accept-Encoding and compresses the response body with it.
 
 Then, the server sends a response with the compressed body and a Content-Encoding header. Content-Encoding specifies the compression scheme that was used.
-
-## Future Features
-- Support handler functions like default http library.
-- Add a recovery middleware
-
-## TODO
-- Finish the refactor and receive incoming request to trigger the proper handling.
-- Fix mess in the CORS tests when running all together.

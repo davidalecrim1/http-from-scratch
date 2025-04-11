@@ -1,11 +1,8 @@
 package fast
 
 import (
-	"bytes"
-	"compress/gzip"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 )
@@ -83,7 +80,7 @@ func NewResponse(statusCode int, headers map[string]string, body []byte) *Respon
 }
 
 func (r *Response) addContentLenghtHeader() {
-	r.headers["Content-Length"] = strconv.Itoa(len(r.body))
+	r.SetHeader("Content-Length", strconv.Itoa(len(r.body)))
 }
 
 func (r *Response) ToBytes() []byte {
@@ -106,39 +103,21 @@ func (r *Response) ToBytes() []byte {
 	return []byte(statusLine + headers + "\r\n" + body)
 }
 
+func (r *Response) GetBody() []byte {
+	return r.body
+}
+
+func (r *Response) SetBody(body []byte) {
+	r.body = body
+}
+
 func (r *Response) SetBodyString(body string) {
 	r.LoadStatus()
-	r.body = []byte(body)
+	r.SetBody([]byte(body))
 }
 
-func (r *Response) AddHeader(key, value string) {
-	r.headers[key] = value
-}
-
-func (r *Response) WithEncoding(encoding string) {
-	if encoding == "gzip" {
-		var buffer bytes.Buffer
-		w := gzip.NewWriter(&buffer)
-
-		_, err := w.Write(r.body)
-		if err != nil {
-			slog.Error("failed to write to gzip writer", "error", err)
-			return
-		}
-
-		if err := w.Close(); err != nil {
-			slog.Error("failed to close gzip writer", "error", err)
-			return
-		}
-
-		slog.Debug("gzip encoding applied",
-			"original_size", len(r.body),
-			"compressed_size", buffer.Len(),
-		)
-
-		r.AddHeader("Content-Encoding", "gzip")
-		r.body = buffer.Bytes()
-	}
+func (r *Response) SetHeader(key, value string) {
+	r.headers[strings.ToLower(key)] = value
 }
 
 func (r *Response) LoadStatus() {
