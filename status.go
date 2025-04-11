@@ -1,15 +1,21 @@
 package fast
 
 const (
-	StatusOK                  int = 200
-	StatusBadRequest          int = 400
-	StatusNotFound            int = 404
-	StatusInternalServerError int = 500
+	StatusOK        = 200
+	StatusNoContent = 204
+
+	StatusBadRequest = 400
+	StatusNotFound   = 404
+
+	StatusInternalServerError = 500
+	StatusServiceUnavailable  = 503
 )
 
 var StatusText = map[int]string{
 	200: "OK",
+
 	400: "Bad Request",
 	404: "Not Found",
+
 	500: "Internal Server Error",
 }

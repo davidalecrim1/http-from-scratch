@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 )
 
@@ -68,15 +69,32 @@ type Response struct {
 }
 
 func NewResponse(statusCode int, headers map[string]string, body []byte) *Response {
-	return &Response{
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	resp := &Response{
 		statusCode: statusCode,
 		headers:    headers,
 		body:       body,
 	}
+
+	return resp
+}
+
+func (r *Response) addContentLenghtHeader() {
+	r.headers["Content-Length"] = strconv.Itoa(len(r.body))
 }
 
 func (r *Response) ToBytes() []byte {
 	statusLine := fmt.Sprintf("HTTP/1.1 %d %s\r\n", r.statusCode, StatusText[r.statusCode])
+
+	body := ""
+	if r.body != nil {
+		body = string(r.body)
+	}
+
+	r.addContentLenghtHeader()
 
 	headers := ""
 	if r.headers != nil {
@@ -85,19 +103,11 @@ func (r *Response) ToBytes() []byte {
 		}
 	}
 
-	body := ""
-	if r.body != nil {
-		body = string(r.body)
-	}
-
 	return []byte(statusLine + headers + "\r\n" + body)
 }
 
 func (r *Response) SetBodyString(body string) {
-	if r.statusCode == 0 {
-		r.statusCode = 200
-	}
-
+	r.LoadStatus()
 	r.body = []byte(body)
 }
 
@@ -129,4 +139,14 @@ func (r *Response) WithEncoding(encoding string) {
 		r.AddHeader("Content-Encoding", "gzip")
 		r.body = buffer.Bytes()
 	}
+}
+
+func (r *Response) LoadStatus() {
+	if r.statusCode == 0 {
+		r.statusCode = 200
+	}
+}
+
+func (r *Response) SetStatus(status int) {
+	r.statusCode = status
 }

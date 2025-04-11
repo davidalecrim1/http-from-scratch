@@ -2,6 +2,7 @@ package fast
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -17,13 +18,13 @@ type App struct {
 	config      Config
 	addr        string
 	ln          net.Listener
-	middlewares []Middleware
+	middlewares []Handler
 	routes      map[string]map[string][]Handler // "method" -> "path"
 }
 
 type Handler func(*Ctx) error
 
-type Middleware func(Handler) Handler
+type Middleware func() Handler
 
 func New(c Config) *App {
 	if c.ConnectionTimeout == 0 {
@@ -70,7 +71,12 @@ func (app *App) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	for {
-		requestBytes := app.readConnection(conn)
+		requestBytes, err := app.readConnection(conn)
+		if err != nil {
+			slog.Error("failed to read the connection", "error", err)
+			return
+		}
+
 		if len(requestBytes) == 0 {
 			slog.Debug("received an empty request. skipping the read")
 			continue
@@ -98,13 +104,18 @@ func (app *App) handleConnection(conn net.Conn) {
 
 func (app *App) handleRequest(request *Request) (response []byte) {
 	if method, ok := app.routes[request.Method]; ok {
-		if handlers, ok := method[request.Path]; ok {
-			ctx := &Ctx{Request: request}
+		if routeHandlers, ok := method[request.Path]; ok {
+			allHandlers := append(app.middlewares, routeHandlers...)
 
-			for _, handler := range handlers {
-				if err := handler(ctx); err != nil {
-					return NewResponse(StatusInternalServerError, nil, []byte{}).ToBytes()
-				}
+			ctx := &Ctx{
+				Request:  request,
+				Response: NewResponse(200, nil, nil),
+				handlers: allHandlers,
+				index:    -1, // because it will be incremented in each c.Next(), therefore the first will be 0.
+			}
+
+			if err := ctx.Next(); err != nil {
+				return NewResponse(StatusInternalServerError, nil, []byte{}).ToBytes()
 			}
 
 			return ctx.Response.ToBytes()
@@ -114,18 +125,18 @@ func (app *App) handleRequest(request *Request) (response []byte) {
 	return NewResponse(StatusNotFound, nil, []byte{}).ToBytes()
 }
 
-func (app *App) readConnection(conn net.Conn) []byte {
+func (app *App) readConnection(conn net.Conn) ([]byte, error) {
 	var buf bytes.Buffer
 	readBuf := make([]byte, 4096)
 	for {
 		n, err := conn.Read(readBuf)
 		if err != nil && err == io.EOF {
-			slog.Info("reached the EOF of the reading connection, stoping the reads...")
+			slog.Debug("reached the EOF of the reading connection, stoping the reads...")
 			break
 		}
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			slog.Warn("read deadline exceeded", "remote", conn.RemoteAddr())
-			break
+			return nil, fmt.Errorf("the read deadline was exceeded: %v", err)
 		}
 
 		buf.Write(readBuf[:n])
@@ -135,11 +146,11 @@ func (app *App) readConnection(conn net.Conn) []byte {
 		}
 	}
 
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
 func (app *App) Get(path string, handlers ...Handler) Router {
-	return app.Add(methodGet, path, handlers...)
+	return app.Add(MethodGet, path, handlers...)
 }
 
 func (app *App) Add(method, path string, handlers ...Handler) Router {
@@ -171,7 +182,7 @@ func (app *App) addRoute(method string, path string, handlers ...Handler) {
 	app.routes[method][path] = handlers
 }
 
-func (app *App) Use(middleware Middleware) {
+func (app *App) Use(middleware Handler) {
 	app.middlewares = append(app.middlewares, middleware)
 }
 

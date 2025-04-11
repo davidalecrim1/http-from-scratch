@@ -1,5 +1,6 @@
 package fast
 
 const (
-	methodGet = "GET"
+	MethodGet     = "GET"
+	MethodOptions = "OPTIONS"
 )

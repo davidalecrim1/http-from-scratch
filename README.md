@@ -82,4 +82,4 @@ Then, the server sends a response with the compressed body and a Content-Encodin
 
 ## TODO
 - Finish the refactor and receive incoming request to trigger the proper handling.
-- Fix the connection error that sometimes happens in the tests.
+- Fix mess in the CORS tests when running all together.
