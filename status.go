@@ -1,6 +1,5 @@
-package http_from_scratch
+package fast
 
-// TODO: Add status on de
 const (
 	StatusOK                  int = 200
 	StatusBadRequest          int = 400

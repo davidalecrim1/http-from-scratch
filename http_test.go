@@ -1,4 +1,4 @@
-package http_from_scratch
+package fast
 
 import (
 	"testing"

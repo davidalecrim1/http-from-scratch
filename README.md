@@ -77,4 +77,9 @@ The server then chooses one of the compression schemes listed in Accept-Encoding
 Then, the server sends a response with the compressed body and a Content-Encoding header. Content-Encoding specifies the compression scheme that was used.
 
 ## Future Features
-- Support handler functions like default http library 
+- Support handler functions like default http library.
+- Add a recovery middleware
+
+## TODO
+- Finish the refactor and receive incoming request to trigger the proper handling.
+- Fix the connection error that sometimes happens in the tests.

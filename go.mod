@@ -1,4 +1,4 @@
-module http_from_scratch
+module fast
 
 go 1.24.0
 

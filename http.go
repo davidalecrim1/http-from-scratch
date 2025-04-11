@@ -1,4 +1,4 @@
-package http_from_scratch
+package fast
 
 import (
 	"bytes"
@@ -67,6 +67,14 @@ type Response struct {
 	body       []byte
 }
 
+func NewResponse(statusCode int, headers map[string]string, body []byte) *Response {
+	return &Response{
+		statusCode: statusCode,
+		headers:    headers,
+		body:       body,
+	}
+}
+
 func (r *Response) ToBytes() []byte {
 	statusLine := fmt.Sprintf("HTTP/1.1 %d %s\r\n", r.statusCode, StatusText[r.statusCode])
 
@@ -83,6 +91,14 @@ func (r *Response) ToBytes() []byte {
 	}
 
 	return []byte(statusLine + headers + "\r\n" + body)
+}
+
+func (r *Response) SetBodyString(body string) {
+	if r.statusCode == 0 {
+		r.statusCode = 200
+	}
+
+	r.body = []byte(body)
 }
 
 func (r *Response) AddHeader(key, value string) {

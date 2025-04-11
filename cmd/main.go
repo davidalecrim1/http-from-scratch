@@ -3,14 +3,21 @@ package main
 import (
 	"log/slog"
 
-	"http_from_scratch"
+	"fast"
 )
 
 func main() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
-	s := http_from_scratch.NewServer(":8097")
-	err := s.Start()
+	app := fast.New(
+		fast.Config{},
+	)
+
+	app.Get("/test", func(ctx *fast.Ctx) error {
+		return ctx.SendString("Hello World")
+	})
+
+	err := app.Listen(":8098")
 	if err != nil {
 		slog.Error("failed to start server", "error", err)
 	}
