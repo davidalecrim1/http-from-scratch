@@ -98,56 +98,20 @@ func TestHandler(t *testing.T) {
 	})
 }
 
-func TestMiddleware_Recovery(t *testing.T) {
-	app := fast.New(
-		fast.Config{},
-	)
-
-	app.Use(recovery.New())
-
-	app.Get("/", func(c *fast.Ctx) error {
-		panic("expected panic to be recovered")
-	})
-
-	go func() {
-		err := app.Listen(":8097")
-		if err != nil {
-			log.Fatal("failed to start server for tests")
-		}
-	}()
-
-	t.Cleanup(func() {
-		if err := app.Shutdown(); err != nil {
-			slog.Error("failed to shutdown the server")
-		}
-	})
-
-	t.Run("should handle middleware for recovery of panics", func(t *testing.T) {
-		client := &http.Client{
-			Timeout: 5 * time.Second,
-		}
-
-		resp, err := client.Get("http://localhost:8097")
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-
-		assert.Equal(t, respBody, []byte("received an error while executing"))
-		assert.Equal(t, fast.StatusServiceUnavailable, resp.StatusCode)
-	})
-}
-
-func TestMiddleware_CORS(t *testing.T) {
+func TestMiddlewares(t *testing.T) {
 	app := fast.New(
 		fast.Config{},
 	)
 
 	app.Use(cors.New())
+	app.Use(recovery.New())
 
-	app.Get("/", func(c *fast.Ctx) error {
+	app.Get("/middleware", func(c *fast.Ctx) error {
 		return c.SendString("OK")
+	})
+
+	app.Get("/recovery", func(c *fast.Ctx) error {
+		panic("expected panic to be recovered")
 	})
 
 	go func() {
@@ -170,7 +134,7 @@ func TestMiddleware_CORS(t *testing.T) {
 			Timeout: 5 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097")
+		resp, err := client.Get("http://localhost:8097/middleware")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -183,5 +147,21 @@ func TestMiddleware_CORS(t *testing.T) {
 		assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
 		assert.Equal(t, "GET,POST,PUT,DELETE,OPTIONS", resp.Header.Get("Access-Control-Allow-Methods"))
 		assert.Equal(t, "Content-Type, Authorization", resp.Header.Get("Access-Control-Allow-Headers"))
+	})
+
+	t.Run("should handle middleware for recovery of panics", func(t *testing.T) {
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+
+		resp, err := client.Get("http://localhost:8097/recovery")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, respBody, []byte("received an error while executing"))
+		assert.Equal(t, fast.StatusServiceUnavailable, resp.StatusCode)
 	})
 }
