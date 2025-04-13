@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"log/slog"
@@ -34,6 +35,12 @@ func TestHandler(t *testing.T) {
 
 	app.Get("/", func(c *fast.Ctx) error {
 		return c.SendString("OK")
+	})
+
+	app.Get("/get-json", func(c *fast.Ctx) error {
+		return c.JSON(fast.Map{
+			"message": "Hello World",
+		})
 	})
 
 	customMiddleware := func(c *fast.Ctx) error {
@@ -75,9 +82,51 @@ func TestHandler(t *testing.T) {
 
 		assert.Equal(t, []byte("OK"), respBody)
 		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+		assert.Equal(t, fast.StatusOK, resp.StatusCode)
 	})
 
-	t.Run("should support wrapped handlers WITHOUT global middlewares", func(t *testing.T) {
+	t.Run("should return 200 with a valid JSON struct", func(t *testing.T) {
+		t.Parallel()
+
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+
+		resp, err := client.Get("http://localhost:8097/get-json")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		var respBody map[string]any
+		err = json.Unmarshal(raw, &respBody)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Hello World", respBody["message"])
+		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+		assert.Equal(t, fast.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("should return 404 for unexisting path", func(t *testing.T) {
+		t.Parallel()
+
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+
+		resp, err := client.Get("http://localhost:8097/invalid-path")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.Len(t, raw, 0)
+		assert.Equal(t, fast.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("should return 200 with support wrapped handlers WITHOUT global middlewares", func(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
@@ -94,6 +143,7 @@ func TestHandler(t *testing.T) {
 		assert.Equal(t, []byte("OK"), respBody)
 		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
 		assert.Equal(t, "true", resp.Header.Get("x-middleware-header"))
+		assert.Equal(t, fast.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("should handle concurrent requests with 200 response for each", func(t *testing.T) {
@@ -120,6 +170,7 @@ func TestHandler(t *testing.T) {
 
 				assert.Equal(t, []byte("OK"), respBody)
 				assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+				assert.Equal(t, fast.StatusOK, resp.StatusCode)
 			}()
 		}
 
@@ -158,7 +209,7 @@ func TestMiddlewares(t *testing.T) {
 		}
 	})
 
-	t.Run("should handle middleware for CORS", func(t *testing.T) {
+	t.Run("should return 200 after handle middleware for CORS", func(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
@@ -174,10 +225,11 @@ func TestMiddlewares(t *testing.T) {
 
 		assert.Equal(t, respBody, []byte("OK"))
 
-		assert.Equal(t, fast.StatusOK, resp.StatusCode)
 		assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
 		assert.Equal(t, "GET,POST,PUT,DELETE,OPTIONS", resp.Header.Get("Access-Control-Allow-Methods"))
 		assert.Equal(t, "Content-Type, Authorization", resp.Header.Get("Access-Control-Allow-Headers"))
+
+		assert.Equal(t, fast.StatusOK, resp.StatusCode)
 	})
 
 	t.Run("should handle middleware for recovery of panics", func(t *testing.T) {

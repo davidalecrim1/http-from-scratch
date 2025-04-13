@@ -1,6 +1,9 @@
 package fast
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type Ctx struct {
 	Request  *Request
@@ -47,4 +50,14 @@ func (c *Ctx) Next() error {
 	}
 
 	return c.handlers[c.index](c)
+}
+
+func (c *Ctx) JSON(data any) error {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	c.Response.SetBody(raw)
+	return nil
 }
