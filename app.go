@@ -20,6 +20,7 @@ type App struct {
 	ln          net.Listener
 	middlewares []Handler
 	routes      map[string]map[string][]Handler // "method" -> "path"
+	quit        chan struct{}
 }
 
 type Handler func(*Ctx) error
@@ -34,6 +35,7 @@ func New(c Config) *App {
 	return &App{
 		config: c,
 		routes: make(map[string]map[string][]Handler),
+		quit:   make(chan struct{}),
 	}
 }
 
@@ -52,14 +54,21 @@ func (app *App) Listen(addr string) error {
 
 func (app *App) acceptConnections() {
 	for {
-		conn, err := app.ln.Accept()
-		if err != nil {
-			slog.Error("failed to create a new connection, stoping the listener...", "error", err)
-			app.ln.Close()
+		select {
+		case <-app.quit:
+			// TODO: I could add some control to wait the current connections to end before this.
+			slog.Debug("received a quit command, shutting down new connections...")
 			return
-		}
+		default:
+			conn, err := app.ln.Accept()
+			if err != nil {
+				slog.Error("failed to create a new connection, stoping the listener...", "error", err)
+				app.ln.Close()
+				return
+			}
 
-		go app.handleConnection(conn)
+			go app.handleConnection(conn)
+		}
 	}
 }
 
@@ -73,12 +82,17 @@ func (app *App) handleConnection(conn net.Conn) {
 	for {
 		requestBytes, err := app.readConnection(conn)
 		if err != nil {
+			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
+				slog.Debug("the timeout of reading a connection was reached, closing it.")
+				return
+			}
+
 			slog.Error("received an error, closing the connection...", "error", err)
 			return
 		}
 
 		if len(requestBytes) == 0 {
-			slog.Debug("received an empty request. skipping the read")
+			slog.Debug("received an empty request, skipping the reads...")
 			continue
 		}
 
@@ -187,5 +201,6 @@ func (app *App) Use(middleware Handler) {
 }
 
 func (app *App) Shutdown() error {
+	close(app.quit)
 	return app.ln.Close()
 }
