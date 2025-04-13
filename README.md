@@ -1,4 +1,4 @@
-# Fast HTTP Framework
+# HTTP Server from Scratch -> Fast
 
 Fast is a HTTP framework **under creation** from scratch in Go to learn by doing the fundamentals of computing and the HTTP protocol.
 
@@ -29,11 +29,12 @@ The server will start listening on `localhost:8097`.
 ### Running Tests
 To run the test suite:
 ```sh
-make test
+make tests
 ```
-Or manually:
+
+after that, see the coverage:
 ```sh
-go test ./...
+make coverage
 ```
 
 ## HTTP Overview
