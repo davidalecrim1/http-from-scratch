@@ -102,6 +102,7 @@ func (app *App) handleConnection(conn net.Conn) {
 		requestBytes, err := app.readConnection(conn)
 		if err != nil {
 			// TODO: Improve this in the future.
+			// The `if ne, ok := err.(net.Error); ok && ne.Timeout()` didn't worked.
 			if strings.Contains(err.Error(), "the read deadline was exceeded") {
 				slog.Debug("the timeout of the connection was reached, closing it", "error", err)
 				return
