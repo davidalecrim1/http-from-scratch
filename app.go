@@ -63,9 +63,8 @@ func (app *App) acceptConnections() {
 		default:
 			conn, err := app.ln.Accept()
 			if err != nil {
-				slog.Error("failed to create a new connection, stoping the listener...", "error", err)
-				app.ln.Close()
-				return
+				slog.Warn("failed to create a new connection, stoping the listener...", "error", err)
+				continue
 			}
 
 			go app.handleConnection(conn)
