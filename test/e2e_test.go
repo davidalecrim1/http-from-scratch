@@ -29,7 +29,7 @@ func getRandomPort() int {
 }
 
 func TestMain(m *testing.M) {
-	slog.SetLogLoggerLevel(slog.LevelWarn)
+	slog.SetLogLoggerLevel(slog.LevelInfo)
 
 	code := m.Run()
 	os.Exit(code)
@@ -71,7 +71,7 @@ func TestHandler(t *testing.T) {
 	}()
 
 	t.Cleanup(func() {
-		if err := app.Shutdown(); err != nil {
+		if err := app.Shutdown(true); err != nil {
 			slog.Error("failed to shutdown the server")
 		}
 	})
@@ -290,7 +290,7 @@ func TestMiddlewares(t *testing.T) {
 	}()
 
 	t.Cleanup(func() {
-		if err := app.Shutdown(); err != nil {
+		if err := app.Shutdown(true); err != nil {
 			slog.Error("failed to shutdown the server")
 		}
 	})
@@ -357,7 +357,7 @@ func TestMiddleware_Compress(t *testing.T) {
 	}()
 
 	t.Cleanup(func() {
-		if err := app.Shutdown(); err != nil {
+		if err := app.Shutdown(true); err != nil {
 			slog.Error("failed to shutdown the server")
 		}
 	})

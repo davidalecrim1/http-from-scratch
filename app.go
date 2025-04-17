@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,6 +24,8 @@ type App struct {
 	middlewares []Handler
 	routes      map[string]map[string][]Handler // "method" -> "path"
 	quit        chan struct{}
+	wg          sync.WaitGroup
+	activeConns atomic.Int64
 }
 
 type Handler func(*Ctx) error
@@ -67,6 +71,8 @@ func (app *App) acceptConnections() {
 				continue
 			}
 
+			app.activeConns.Add(1)
+			app.wg.Add(1)
 			go app.handleConnection(conn)
 		}
 	}
@@ -75,16 +81,24 @@ func (app *App) acceptConnections() {
 func (app *App) handleConnection(conn net.Conn) {
 	defer func() {
 		slog.Debug("closing the connection given the keep alive header is not present.")
+
 		conn.Close()
+		app.activeConns.Add(-1)
+		app.wg.Done()
 	}()
 
-	for {
-		err := conn.SetDeadline(time.Now().Add(app.config.IdleTimeout))
-		if err != nil {
-			slog.Error("failed to set deadline for the connection", "error", err)
-			return
-		}
+	err := conn.SetDeadline(time.Now().Add(app.config.IdleTimeout))
+	if err != nil {
+		slog.Error("failed to set deadline for the connection", "error", err)
+		return
+	}
 
+	err = app.resetConnTimeout(conn)
+	if err != nil {
+		return
+	}
+
+	for {
 		requestBytes, err := app.readConnection(conn)
 		if err != nil {
 			// TODO: Improve this in the future.
@@ -116,11 +130,22 @@ func (app *App) handleConnection(conn net.Conn) {
 		}
 
 		if app.shouldKeepAlive(request) {
+			app.resetConnTimeout(conn)
 			continue
 		} else {
+			app.resetConnTimeout(conn)
 			return
 		}
 	}
+}
+
+func (app *App) resetConnTimeout(conn net.Conn) error {
+	err := conn.SetDeadline(time.Now().Add(app.config.IdleTimeout))
+	if err != nil {
+		slog.Error("failed to set deadline for the connection", "error", err)
+		return err
+	}
+	return nil
 }
 
 func (app *App) shouldKeepAlive(req *Request) bool {
@@ -215,7 +240,16 @@ func (app *App) Use(middleware Handler) {
 	app.middlewares = append(app.middlewares, middleware)
 }
 
-func (app *App) Shutdown() error {
+func (app *App) Shutdown(force bool) error {
+	slog.Debug("amount of active connections BEFORE closing", "activeConns", app.activeConns.Load())
+
 	close(app.quit)
-	return app.ln.Close()
+
+	if !force {
+		app.wg.Wait()
+	}
+
+	err := app.ln.Close()
+	slog.Debug("amount of active connections AFTER closing", "activeConns", app.activeConns.Load())
+	return err
 }
