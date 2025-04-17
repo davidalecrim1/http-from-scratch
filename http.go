@@ -15,19 +15,19 @@ type Request struct {
 	Body     []byte
 }
 
-func NewRequest(request []byte) (Request, error) {
+func NewRequest(request []byte) (*Request, error) {
 	lines := strings.Split(string(request), "\r\n")
 	if len(lines) < 1 {
-		return Request{}, errors.New("invalid request")
+		return &Request{}, errors.New("invalid request")
 	}
 
 	// Parse the first line (method, path, protocol)
 	headerFirstLine := strings.Split(lines[0], " ")
 	if len(headerFirstLine) < 3 {
-		return Request{}, errors.New("invalid request line")
+		return &Request{}, errors.New("invalid request line")
 	}
 
-	req := Request{
+	req := &Request{
 		Method:   headerFirstLine[0],
 		Path:     headerFirstLine[1],
 		Protocol: headerFirstLine[2],
@@ -59,6 +59,10 @@ func (r *Request) GetHeader(key string) string {
 	return value
 }
 
+func (r *Request) SetHeader(key, val string) {
+	r.headers[strings.ToLower(key)] = val
+}
+
 type Response struct {
 	statusCode int
 	headers    map[string]string
@@ -70,17 +74,12 @@ func NewResponse(statusCode int, headers map[string]string, body []byte) *Respon
 		headers = make(map[string]string)
 	}
 
-	resp := &Response{
+	r := &Response{
 		statusCode: statusCode,
 		headers:    headers,
-		body:       body,
 	}
-
-	return resp
-}
-
-func (r *Response) addContentLenghtHeader() {
-	r.SetHeader("Content-Length", strconv.Itoa(len(r.body)))
+	r.SetBody(body)
+	return r
 }
 
 func (r *Response) ToBytes() []byte {
@@ -90,8 +89,6 @@ func (r *Response) ToBytes() []byte {
 	if r.body != nil {
 		body = string(r.body)
 	}
-
-	r.addContentLenghtHeader()
 
 	headers := ""
 	if r.headers != nil {
@@ -109,6 +106,7 @@ func (r *Response) GetBody() []byte {
 
 func (r *Response) SetBody(body []byte) {
 	r.body = body
+	r.SetHeader("Content-Length", strconv.Itoa(len(r.body)))
 }
 
 func (r *Response) SetBodyString(body string) {

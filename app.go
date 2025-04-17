@@ -7,11 +7,12 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	ConnectionTimeout int // seconds
+	IdleTimeout time.Duration // seconds
 }
 
 type App struct {
@@ -28,8 +29,8 @@ type Handler func(*Ctx) error
 type Middleware func() Handler
 
 func New(c Config) *App {
-	if c.ConnectionTimeout == 0 {
-		c.ConnectionTimeout = 5
+	if c.IdleTimeout == 0 {
+		c.IdleTimeout = time.Second * 120
 	}
 
 	return &App{
@@ -73,17 +74,23 @@ func (app *App) acceptConnections() {
 }
 
 func (app *App) handleConnection(conn net.Conn) {
-	err := conn.SetDeadline(time.Now().Add(time.Second * time.Duration(app.config.ConnectionTimeout)))
-	if err != nil {
-		slog.Error("failed to set deadline for the connection", "error", err)
-	}
-	defer conn.Close()
+	defer func() {
+		slog.Debug("closing the connection given the keep alive header is not present.")
+		conn.Close()
+	}()
 
 	for {
+		err := conn.SetDeadline(time.Now().Add(app.config.IdleTimeout))
+		if err != nil {
+			slog.Error("failed to set deadline for the connection", "error", err)
+			return
+		}
+
 		requestBytes, err := app.readConnection(conn)
 		if err != nil {
-			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
-				slog.Debug("the timeout of reading a connection was reached, closing it.")
+			// TODO: Improve this in the future.
+			if strings.Contains(err.Error(), "the read deadline was exceeded") {
+				slog.Debug("the timeout of the connection was reached, closing it", "error", err)
 				return
 			}
 
@@ -102,18 +109,23 @@ func (app *App) handleConnection(conn net.Conn) {
 			return
 		}
 
-		response := app.handleRequest(&request)
+		response := app.handleRequest(request)
 		_, err = conn.Write(response)
 		if err != nil {
 			slog.Error("failed to write response in the connection", "error", err)
 			return
 		}
 
-		// TODO: Figure out how to actually handle this.
-		// if !shouldKeepAlive {
-		// 	return
-		// }
+		if app.shouldKeepAlive(request) {
+			continue
+		} else {
+			return
+		}
 	}
+}
+
+func (app *App) shouldKeepAlive(req *Request) bool {
+	return (req.GetHeader("connection") != "close")
 }
 
 func (app *App) handleRequest(request *Request) (response []byte) {
@@ -130,6 +142,10 @@ func (app *App) handleRequest(request *Request) (response []byte) {
 
 			if err := ctx.Next(); err != nil {
 				return NewResponse(StatusInternalServerError, nil, []byte{}).ToBytes()
+			}
+
+			if app.shouldKeepAlive(request) {
+				ctx.Set("connection", "keep-alive")
 			}
 
 			return ctx.Response.ToBytes()

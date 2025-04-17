@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"time"
 
 	"fast/middleware/compress"
 
@@ -12,7 +13,9 @@ func main() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	app := fast.New(
-		fast.Config{},
+		fast.Config{
+			IdleTimeout: 30 * time.Second,
+		},
 	)
 
 	app.Use(compress.New())

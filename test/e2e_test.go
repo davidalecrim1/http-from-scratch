@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"sync"
 	"testing"
@@ -22,7 +23,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetLogLoggerLevel(slog.LevelWarn)
 
 	code := m.Run()
 	os.Exit(code)
@@ -30,7 +31,9 @@ func TestMain(m *testing.M) {
 
 func TestHandler(t *testing.T) {
 	app := fast.New(
-		fast.Config{},
+		fast.Config{
+			IdleTimeout: 5 * time.Second,
+		},
 	)
 
 	app.Get("/", func(c *fast.Ctx) error {
@@ -70,7 +73,7 @@ func TestHandler(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8097")
@@ -82,6 +85,7 @@ func TestHandler(t *testing.T) {
 
 		assert.Equal(t, []byte("OK"), respBody)
 		assert.NotEmpty(t, resp.Header.Get("Content-Length"))
+		assert.Equal(t, resp.Header.Get("Connection"), "keep-alive")
 		assert.Equal(t, fast.StatusOK, resp.StatusCode)
 	})
 
@@ -89,7 +93,7 @@ func TestHandler(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8097/get-json")
@@ -112,7 +116,7 @@ func TestHandler(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8097/invalid-path")
@@ -130,7 +134,7 @@ func TestHandler(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8097/custom-middleware")
@@ -154,7 +158,7 @@ func TestHandler(t *testing.T) {
 		wg.Add(totalRequests)
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		for range totalRequests {
@@ -179,9 +183,80 @@ func TestHandler(t *testing.T) {
 	})
 }
 
+func TestConnectionTimeout(t *testing.T) {
+	app := fast.New(
+		fast.Config{
+			IdleTimeout: 5 * time.Second,
+		},
+	)
+
+	app.Get("/", func(c *fast.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	app.Get("/get-json", func(c *fast.Ctx) error {
+		return c.JSON(fast.Map{
+			"message": "Hello World",
+		})
+	})
+
+	customMiddleware := func(c *fast.Ctx) error {
+		err := c.Next()
+		c.Set("x-middleware-header", "true")
+		return err
+	}
+
+	app.Get("/custom-middleware", customMiddleware, func(c *fast.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	app.Get("/handle-connection-close", func(c *fast.Ctx) error {
+		c.Request.SetHeader("connection", "close") // manually setting the request header
+		return c.SendString("OK")
+	})
+
+	go func() {
+		err := app.Listen(":8110")
+		if err != nil {
+			log.Fatal("failed to start server for tests")
+		}
+	}()
+
+	t.Run("should handle the connection close header", func(t *testing.T) {
+		t.Parallel()
+		// five times to ensure a new connection is created each time.
+		for range 5 {
+			client := &http.Client{
+				Timeout: 3 * time.Second,
+			}
+
+			req, _ := http.NewRequest("GET", "http://localhost:8110/handle-connection-close", nil)
+			trace := &httptrace.ClientTrace{
+				GotConn: func(gci httptrace.GotConnInfo) {
+					require.Equal(t, false, gci.Reused)
+				},
+			}
+
+			req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+
+			respBody, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			resp.Body.Close()
+
+			assert.Equal(t, []byte("OK"), respBody)
+			assert.Equal(t, fast.StatusOK, resp.StatusCode)
+		}
+	})
+}
+
 func TestMiddlewares(t *testing.T) {
 	app := fast.New(
-		fast.Config{},
+		fast.Config{
+			IdleTimeout: 5 * time.Second,
+		},
 	)
 
 	app.Use(cors.New())
@@ -213,7 +288,7 @@ func TestMiddlewares(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8098/middleware")
@@ -234,7 +309,7 @@ func TestMiddlewares(t *testing.T) {
 
 	t.Run("should handle middleware for recovery of panics", func(t *testing.T) {
 		client := &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		resp, err := client.Get("http://localhost:8098/recovery")
@@ -277,7 +352,7 @@ func TestMiddleware_Compress(t *testing.T) {
 		t.Parallel()
 
 		client := &http.Client{
-			Timeout: 360 * time.Second,
+			Timeout: time.Second * 3,
 		}
 
 		resp, err := client.Get("http://localhost:8099")
