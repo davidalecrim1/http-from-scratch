@@ -2,9 +2,11 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"os"
@@ -21,6 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func getRandomPort() int {
+	return 8000 + rand.Intn(1000)
+}
 
 func TestMain(m *testing.M) {
 	slog.SetLogLoggerLevel(slog.LevelWarn)
@@ -56,8 +62,9 @@ func TestHandler(t *testing.T) {
 		return c.SendString("OK")
 	})
 
+	port := getRandomPort()
 	go func() {
-		err := app.Listen(":8097")
+		err := app.Listen(fmt.Sprintf(":%d", port))
 		if err != nil {
 			log.Fatal("failed to start server for tests")
 		}
@@ -76,7 +83,7 @@ func TestHandler(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -96,7 +103,7 @@ func TestHandler(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097/get-json")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d/get-json", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -119,7 +126,7 @@ func TestHandler(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097/invalid-path")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d/invalid-path", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -137,7 +144,7 @@ func TestHandler(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8097/custom-middleware")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d/custom-middleware", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -165,7 +172,7 @@ func TestHandler(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				resp, err := client.Get("http://localhost:8097")
+				resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
 				require.NoError(t, err)
 				defer resp.Body.Close()
 
@@ -215,8 +222,11 @@ func TestConnectionTimeout(t *testing.T) {
 		return c.SendString("OK")
 	})
 
+	port := getRandomPort()
 	go func() {
-		err := app.Listen(":8110")
+		slog.Info("TestConnectionTimeout - Listening on", "port", port)
+
+		err := app.Listen(fmt.Sprintf(":%d", port))
 		if err != nil {
 			log.Fatal("failed to start server for tests")
 		}
@@ -230,7 +240,7 @@ func TestConnectionTimeout(t *testing.T) {
 				Timeout: 3 * time.Second,
 			}
 
-			req, _ := http.NewRequest("GET", "http://localhost:8110/handle-connection-close", nil)
+			req, _ := http.NewRequest("GET", fmt.Sprintf("http://localhost:%d/handle-connection-close", port), nil)
 			trace := &httptrace.ClientTrace{
 				GotConn: func(gci httptrace.GotConnInfo) {
 					require.Equal(t, false, gci.Reused)
@@ -271,8 +281,9 @@ func TestMiddlewares(t *testing.T) {
 		panic("expected panic to be recovered")
 	})
 
+	port := getRandomPort()
 	go func() {
-		err := app.Listen(":8098")
+		err := app.Listen(fmt.Sprintf(":%d", port))
 		if err != nil {
 			log.Fatal("failed to start server for tests")
 		}
@@ -291,7 +302,7 @@ func TestMiddlewares(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8098/middleware")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d/middleware", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -312,7 +323,7 @@ func TestMiddlewares(t *testing.T) {
 			Timeout: 3 * time.Second,
 		}
 
-		resp, err := client.Get("http://localhost:8098/recovery")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d/recovery", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
@@ -335,8 +346,11 @@ func TestMiddleware_Compress(t *testing.T) {
 		return c.SendString("OK")
 	})
 
+	port := getRandomPort()
 	go func() {
-		err := app.Listen(":8099")
+		slog.Info("TestMiddleware_Compress - Listening on", "port", port)
+
+		err := app.Listen(fmt.Sprintf(":%d", port))
 		if err != nil {
 			log.Fatal("failed to start server for tests")
 		}
@@ -355,7 +369,7 @@ func TestMiddleware_Compress(t *testing.T) {
 			Timeout: time.Second * 3,
 		}
 
-		resp, err := client.Get("http://localhost:8099")
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
